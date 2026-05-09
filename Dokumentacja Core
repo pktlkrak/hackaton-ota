@@ -1,0 +1,29 @@
+# valid_main_header
+"rust".
+key_provider: &dyn KeyProvider, data_provider: &mut dyn FirmwareFileProvider) -> Result<(), FirmwareFileError>
+```
+Extracts key_id, SHA, and signature.
+
+After that, I often check:
+
+- length
+- versions
+- HASH
+- Signature
+
+# valid_magic_and_additional_metadata
+"rust".
+data_provider: &mut dyn FirmwareFileProvider, trigger: &dyn FirmwareUpdateTrigger) -> Result<(), FirmwareFileError>
+```
+Checks the magic number and metadata
+
+# execute_update(
+"rust".
+key_provider: &dyn KeyProvider, data_provider: &mut dyn FirmwareFileProvider, trigger: &dyn FirmwareUpdateTrigger,) -> Result<(), FirmwareFileError>
+```
+The previous functions and the standalone installer were called.
+"rust".
+valid_magic_and_additional_metadata(data_provider, trigger)?;
+validate_main_header(key_provider, data_provider)?;
+trigger.export_and_execute(data_provider)
+```
