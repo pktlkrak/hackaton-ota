@@ -106,6 +106,8 @@ The sections data segment will be terminated by a struct with all fields set to 
 
 Each of these structs represent a single blob of data. The section number `0x00000001` shall represent the second stage updater.
 
+The per-section SHASUM could be used in the future to, in case the firmware file gets damaged during transfer, only re-fetch the broken part from the server.
+
 ### Actual contents
 
 Just the raw data concatenated together.

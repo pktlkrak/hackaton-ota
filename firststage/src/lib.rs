@@ -4,4 +4,5 @@ extern crate alloc;
 
 mod structs;
 mod traits;
+mod errors;
 mod core;
