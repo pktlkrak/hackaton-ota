@@ -16,6 +16,37 @@ The firmware update server shall be written in Java, to make it simple to write 
 
 No AI shall be used in writing the code of any software related to the firmware updater. It shall only be used to detect potential vulnerabilities.
 
+# Firmware update server
+
+The server's job is to do two things:
+
+- Check if a given target is to have its firmware updated
+- Provide the firmware update files
+
+Since the files are encrypted, it is safe for them to be handled by third parties. Therefore, the endpoint responsible for providing the update files is not protected.
+
+## Cohorts
+
+In order to prevent a bad update from affecting a large amount of users, the updates should be rolled out in waves. Users which should receive the update at the same time all should belong to one cohort.
+
+So as to keep things simple during the presentation, the function mapping the device's serial number to a given cohort is as follows:
+
+```
+cohort = xxhash(serial_number) % 16
+```
+
+This should split the userbase into 16 cohorts. There will be 16 groups of users, each getting the update file at a different time. In case of a bad update, only a group of users should be affected, instead of everyone.
+
+## Serial numbers
+
+The serial numbers should encode the device type, as well as the "real" serial number.
+The format is as follows: `DEVID-serial` where `DEVID` is a device type identifier (5 chars), akin to a model number, and `serial` being any length.
+
+## Transport layer
+
+The firmware update server shall provide a HTTPS port,
+and the stage one updater shall use certificate pinning to make it harder to decrypt packets.
+
 # Running the firmware update file
 
 ## The flow of operations
@@ -45,9 +76,9 @@ The file will consist of three parts:
 The main header for now consists of the following fields (notice the section being aligned to 16 byte boundary):
 
 - Magic number: `UPXD0001` - 8 bytes
-- SHA512SUM of the (additional metadata + sections data + actual contents) - 64 bytes
 - Key ID - 8 bytes
-- Signature (RSA2048) - 256 bytes
+- SHA512SUM of the (additional metadata + sections data + actual contents) - 64 bytes
+- Signature (ML-DSA 87) - 4627 bytes
 
 The `Key ID` will let the updater select the correct firmware decryption key, as well as the signature verification key. It being an integer also reduces the attack surface - strings defining the pathname can get concatenated incorrectly, causing potential issues.
 
@@ -60,7 +91,7 @@ The additional metadata section is meant to describe additional data which may b
 Structure:
 
 - Semver (2 bytes for each: major, minor, patch, alpha) - 8 bytes in total.
-- Flags: 8 bytes - additional data which might be used to discern if an illicit operation was happening.
+- Length (the cumulative length of all subsequent sections) - 8 bytes.
 
 ### Sections data
 
