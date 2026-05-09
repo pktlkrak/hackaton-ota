@@ -1,29 +1,29 @@
-# main 
-Tworzy i zapisuje na dysku klucz prywatny oraz woła odpowienie fukcje.
-Jeśli nie uda stworzyć się kluczy pliki zostaną usunięte.
+# main
+Creates and saves a private key to disk and calls the appropriate functions.
+If key creation fails, the files will be deleted.
 
-# parse_semver 
+# parse_semver
 ```rust
 str->Result<Semver>
 ```
 
-funkcja parsuje string do Semver lub extended Semver w zależności od wysłanych danych 
+The function parses a string into Semver or extended Semver, depending on the data sent.
 
 # package_file
-**Funkcja najpierw usuwa dane z istniejących plików docelowych, potem je zapisuje**
+**The function first removes the data from existing target files, then saves it.**
 
 ```rust
-private_key_file: String, version: String, installer_path: String,output: String -> Result<()>
+private_key_file: String, version: String, installer_path: String, output: String -> Result<()>
 ```
 
-Sprawdza czy podany plik klucza ma odpownienią długość (*40*). 
-Wyłskuje z metadanych podaną długość danych.
-Tworzy kp oraz id z klucza prywatnego, po czym tworzy klucz MlDsa87.
+Checks whether the specified key file is the correct length (*40*).
+
+Extracts the specified data length from the metadata.
+Creates the kp and id from the private key, and then creates an MlDsa87 key.
 ```
 AdditionalMetadata = { length: SECOND_STAGE_OFFSET + installer_length, semver}
 ```
-Po utworzeniu pliku aktualizacji tworzy hash SHA512 i podpisuje nim plik aktualizacji.
-
+After creating the update file, it creates a SHA512 hash and signs the update file with it.
 
 ```rust
 output.seek(std::io::SeekFrom::Start(0))?;
