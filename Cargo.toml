@@ -1,0 +1,10 @@
+[workspace]
+members = ["firststage", "packager"]
+
+[package]
+name = "client"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+firststage = { path = "./firststage" }
