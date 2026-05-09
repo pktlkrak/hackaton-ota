@@ -1,35 +1,29 @@
 # Initial considerations
 
-This firmware update project considers the target system (so the device whose firmware will be updated) to be perfectly secure, and to be capable of holding the keys in a matter which will not be reachable by the potential attacker. It is also assumed the firmware update will not be modified by external tasks after it had been downloaded. Unless these conditions are met, the system *will* be insecure.
+This desktop app updater project considers the target system (so the device on which the application will be installed) to be secure, and to be capable of holding the public keys in a matter which will not be editable by the potential attacker.
 
 Unless specified otherwise, all integers shall be stored as little endian.
 
-The target device will host a copy of the "first stage updater", whose job it will be to verify the firmware update file and run the "second stage updater", which will be part of the firmware update file.
+The target will host a copy of the "first stage updater", whose job it will be to download and verify the update file and run the "second stage updater" or "installer", which will be part of the update file, and which will actually replace the application's files on the target.
 
-The firmware update file will consist of the encrypted firmware blob, and the encrypted second stage updater.
+For the purpose of this demonstration, the application will be a single file called `app`, and the second stage updater - a shell file which will replace the `app` file when ran.
 
-The key to the second stage updater shall be stored in the target device's filesystem, whereas the key to the firmware blob shall be stored within the second stage updater itself.
+The update server shall be written in Java, to make it simple to write new functionality later on. The first stage updater's implementation language will be rust, so as to make it simple, secure and cross-platform.
 
-For the purpose of this demonstration, the second stage updater shall be a shell script, whose job it will be to decrypt the file and show its contents, and the update contents shall be represented by a single encrypted file with the contents of `FIRMWARE UPDATE`.
+No AI shall be used in writing the code of any software related to the updater. It shall only be used to detect potential vulnerabilities.
 
-The firmware update server shall be written in Java, to make it simple to write new functionality later on. The first stage updater's implementation language will be rust, so as to make it simple to run on bare embedded devices without any underlying operating system, making the propsed OTA solution universal.
-
-No AI shall be used in writing the code of any software related to the firmware updater. It shall only be used to detect potential vulnerabilities.
-
-# Firmware update server
+# Update server
 
 The server's job is to do two things:
 
-- Check if a given target is to have its firmware updated
-- Provide the firmware update files
-
-Since the files are encrypted, it is safe for them to be handled by third parties. Therefore, the endpoint responsible for providing the update files is not protected.
+- Check if a given target has an update available
+- Provide the update installer
 
 ## Cohorts
 
 In order to prevent a bad update from affecting a large amount of users, the updates should be rolled out in waves. Users which should receive the update at the same time all should belong to one cohort.
 
-So as to keep things simple during the presentation, the function mapping the device's serial number to a given cohort is as follows:
+So as to keep things simple during the presentation, the function mapping the installation's random serial number to a given cohort is as follows:
 
 ```
 cohort = xxhash(serial_number) % 16
@@ -39,37 +33,34 @@ This should split the userbase into 16 cohorts. There will be 16 groups of users
 
 ## Serial numbers
 
-The serial numbers should encode the device type, as well as the "real" serial number.
-The format is as follows: `DEVID-serial` where `DEVID` is a device type identifier (5 chars), akin to a model number, and `serial` being any length.
+The serial numbers should encode the application type, as well as the "real" serial number.
+The format is as follows: `APPID-serial` where `APPID` is a application identifier (5 chars), akin to a model number - what we are updating, and `serial` being an UUID.
 
 ## Transport layer
 
-The firmware update server shall provide a HTTPS port,
-and the stage one updater shall use certificate pinning to make it harder to decrypt packets.
+The update server shall provide a HTTPS port,
+and the stage one updater shall use certificate pinning to make it harder to swap servers.
 
-# Running the firmware update file
+# Running the update installer
 
 ## The flow of operations
-After the file will have been downloaded, it will be provided to the updater.
+After the file will have been downloaded, it will be verified by the updater and executed.
 
 The updater will verify whether or not the file is valid, if it's signed and if its signature is known by the updater.
 
-Following that, the file will be extracted, and the update script / binary built into the update file will be decrypted by the firmware update key, and later executed.
+Following that, the file will be extracted, and the update script / binary built into the update file will executed.
 
-The sections following the second stage updater shall not be decrypted by the updater itself, and instead they should act as assets for the second stage updater, which shall decrypt them by itself.
-
-## The outline of the firmware update file.
+## The outline of the update file.
 
 ### Synopsis
 
-The firmware update file shall be a custom-made archive. Existing archive files all have large attack surfaces, which makes them unsuitable for storing firmware updates.
+The update file shall be a custom-made archive. Existing archive files all have large attack surfaces, which makes them unsuitable for storing updates.
 
 The file will consist of three parts:
 
 - Main header
-- Additional metadat
-- Sections data
-- Actual contents
+- Additional metadata
+- Second stage updater
 
 ### Main header
 
@@ -77,10 +68,10 @@ The main header for now consists of the following fields (notice the section bei
 
 - Magic number: `UPXD0001` - 8 bytes
 - Key ID - 8 bytes
-- SHA512SUM of the (additional metadata + sections data + actual contents) - 64 bytes
-- Signature (ML-DSA 87) - 4627 bytes
+- SHA512SUM of the (additional metadata + second stage updater) - 64 bytes
+- Signature (ML-DSA 87) of the SHASUM - 4627 bytes
 
-The `Key ID` will let the updater select the correct firmware decryption key, as well as the signature verification key. It being an integer also reduces the attack surface - strings defining the pathname can get concatenated incorrectly, causing potential issues.
+The `Key ID` will let the updater select the correct signature verification key. It being an integer also reduces the attack surface - strings defining the pathname can get concatenated incorrectly, causing potential issues.
 
 This layout means that the rest of the file can be treated as a "immutable blob" secured by the signature.
 
@@ -93,21 +84,6 @@ Structure:
 - Semver (2 bytes for each: major, minor, patch, alpha) - 8 bytes in total.
 - Length (the cumulative length of all subsequent sections) - 8 bytes.
 
-### Sections data
+### Second stage updater / installer
 
-The sections data will be a list of structures, each having the following format:
-
-- Section number - 4 bytes (UNIQUE! Non-zero)
-- 4 bytes padding (Align next to 8b - has to be all zeros)
-- Section size - (Has to be aligned to 16 bytes, in case format gets used by embedded devices and not a linux box) - 8 bytes
-- Section SHA256SUM - 32 bytes
-
-The sections data segment will be terminated by a struct with all fields set to \0.
-
-Each of these structs represent a single blob of data. The section number `0x00000001` shall represent the second stage updater.
-
-The per-section SHASUM could be used in the future to, in case the firmware file gets damaged during transfer, only re-fetch the broken part from the server.
-
-### Actual contents
-
-Just the raw data concatenated together.
+Just the raw installer data
