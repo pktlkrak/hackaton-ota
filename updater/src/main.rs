@@ -1,5 +1,5 @@
 mod local_fs_impl;
-use std::{env::temp_dir, fs::{self, File, OpenOptions}, process::exit};
+use std::{env::temp_dir, fs::{self, File, OpenOptions}, process::exit, time::Duration};
 
 use clap::{Parser, Subcommand};
 use firststage::{core::{validate_and_perform_update, validate_update}, structs::Semver};
@@ -53,6 +53,10 @@ enum Commands {
         #[arg(long)]
         cert_dir: Option<String>,
 
+        /// Timeout (in millis). Defaults to 2000
+        #[arg(long)]
+        timeout: Option<u64>,
+
         /// Base Server URL
         server: String,
     }
@@ -88,8 +92,8 @@ fn main() {
                 println!("Update file extracted.");
             }
         }
-        Commands::Check { installer_to_write, serial, cert_dir, server: base_server_url } => {
-            let mut client = reqwest::blocking::ClientBuilder::new();
+        Commands::Check { installer_to_write, serial, cert_dir, server: base_server_url, timeout } => {
+            let mut client = reqwest::blocking::ClientBuilder::new().timeout(Some(Duration::from_millis(timeout.unwrap_or(2000))));
             if let Some(cert_dir) = cert_dir {
                 let mut certs = vec![];
                 for file in fs::read_dir(cert_dir).unwrap() {
@@ -104,7 +108,7 @@ fn main() {
                 client = client.tls_certs_only(certs);
             }
 
-            client = client.danger_accept_invalid_certs(true);
+            client = client.tls_danger_accept_invalid_certs(true);
 
             let client = client.build().unwrap();
             let base_url = Url::parse(&base_server_url).unwrap();

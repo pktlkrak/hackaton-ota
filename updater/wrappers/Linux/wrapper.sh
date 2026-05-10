@@ -6,21 +6,22 @@
 # start the app without any updates being triggered.
 
 source ./app_config
-SERVER=https://localhost:3000/
+SERVER=https://192.168.1.75:8443/
 
 
 ./updater --current-version $VERSION \
           --key-directory keys \
           check \
           --installer-to-write installer.tmp \
-          --serial app01-123123123 \
+          --serial $SERIAL \
           --cert-dir certificates \
-          https://localhost:3000/
+          $SERVER
 
 if [ $? -eq 123 ]; then
     echo "Running"
     chmod a+x installer.tmp
     ./installer.tmp
+    rm installer.tmp
 fi
 
 ./application
