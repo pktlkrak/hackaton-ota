@@ -1,5 +1,5 @@
 mod local_fs_impl;
-use std::{env::temp_dir, fs::{self, File}, process::exit};
+use std::{env::temp_dir, fs::{self, File, OpenOptions}, process::exit};
 
 use clap::{Parser, Subcommand};
 use firststage::{core::{validate_and_perform_update, validate_update}, structs::Semver};
@@ -50,6 +50,7 @@ enum Commands {
         serial: String,
 
         /// Certificate directory - will enable cert pinning.
+        #[arg(long)]
         cert_dir: Option<String>,
 
         /// Base Server URL
@@ -103,6 +104,8 @@ fn main() {
                 client = client.tls_certs_only(certs);
             }
 
+            client = client.danger_accept_invalid_certs(true);
+
             let client = client.build().unwrap();
             let base_url = Url::parse(&base_server_url).unwrap();
             
@@ -134,13 +137,13 @@ fn main() {
             file_fetch_url.path_segments_mut().unwrap().push(parts[1]);
             let mut update_file_response = client.get(file_fetch_url).send().unwrap();
             let temp_file_path = temp_dir().join(format!("temporary-{serial}.xdu"));
-            let mut temporary_file = File::create(&temp_file_path).unwrap();
+            let mut temporary_file = OpenOptions::new().create(true).write(true).truncate(true).read(true).open(&temp_file_path).unwrap();
             update_file_response.copy_to(&mut temporary_file).unwrap();
             let effector = FSFirmwareUpdateEffector::new(current_ver, &installer_to_write);
             let mut source = FSFirmwareFileProvider::new(temporary_file);
             validate_and_perform_update(&key_provider, &mut source, &effector).unwrap();
             
-            fs::remove_file(&temp_file_path).unwrap();
+            // fs::remove_file(&temp_file_path).unwrap();
             exit(TRIGGER_UPDATE_FILE);
         }
     }

@@ -23,7 +23,8 @@ impl FirmwareFileProvider for FSFirmwareFileProvider {
     }
     
     fn read_exact(&mut self, destination: &mut [u8]) -> Result<(), FirmwareFileError> {
-        if self.file.read_exact(destination).is_err() {
+        if let Err(err) = self.file.read_exact(destination) {
+            println!("E {err:?}");
             Err(FirmwareFileError::ReadError)
         } else {
             Ok(())
@@ -108,6 +109,7 @@ impl FirmwareUpdateEffector for FSFirmwareUpdateEffector {
     fn export(&self, source: &mut dyn FirmwareFileProvider) -> Result<(), FirmwareFileError> {
         if let Some(destination_path) = &self.destination_path {
             let mut cursor = source.tell();
+            println!("Cursor {cursor}");
             let size = source.get_file_length();
             let mut buffer = [0u8; 512];
             let mut output_file = match File::create(destination_path.clone()) {
@@ -126,7 +128,7 @@ impl FirmwareUpdateEffector for FSFirmwareUpdateEffector {
                 }
                 cursor += chunk as u64;
                 if output_file.write_all(subbuff).is_err() {
-                    return Err(FirmwareFileError::ReadError);
+                    return Err(FirmwareFileError::WriteError);
                 }
             }
             Ok(())

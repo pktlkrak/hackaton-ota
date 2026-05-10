@@ -1,7 +1,7 @@
 use ml_dsa::{MlDsa87, Signature, VerifyingKey, signature::Verifier};
 use sha2::{Digest, Sha512};
 
-use crate::{errors::FirmwareFileError, structs::{ADDITIONAL_METADATA_OFFSET, AdditionalMetadata}, traits::{FirmwareFileProvider, FirmwareUpdateEffector, KeyProvider}};
+use crate::{errors::FirmwareFileError, structs::{ADDITIONAL_METADATA_OFFSET, AdditionalMetadata, SECOND_STAGE_OFFSET}, traits::{FirmwareFileProvider, FirmwareUpdateEffector, KeyProvider}};
 
 // Checks the main header and all signatures.
 fn validate_main_header(key_provider: &dyn KeyProvider, data_provider: &mut dyn FirmwareFileProvider) -> Result<(), FirmwareFileError> {
@@ -96,5 +96,6 @@ pub fn validate_and_perform_update(
 ) -> Result<(), FirmwareFileError> {
     validate_update(key_provider, data_provider, trigger)?;
     // Export second stage updater
+    data_provider.seek(SECOND_STAGE_OFFSET);
     trigger.export(data_provider)
 }
