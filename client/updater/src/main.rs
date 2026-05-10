@@ -131,6 +131,9 @@ fn main() {
 
             let client = client.build().unwrap();
             let base_url = Url::parse(&base_server_url).unwrap();
+            if base_url.scheme() != "https" {
+                panic!("The updater must use HTTPS to communicate with the server!");
+            }
 
             let mut ver_query_url = base_url.clone();
             ver_query_url.set_path("/get_newest");
