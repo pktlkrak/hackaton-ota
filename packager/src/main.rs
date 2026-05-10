@@ -29,7 +29,7 @@ enum Commands {
         file_path: String,
     },
 
-    // Package an installer
+    /// Package an installer
     Package {
         /// Private key file to sign with
         #[arg(long)]
@@ -44,32 +44,6 @@ enum Commands {
 
         /// Output file
         output: String
-    }
-}
-
-fn parse_semver(string: &str) -> Result<Semver> {
-    let parts: Vec<_> = string.split('.').collect();
-    match parts.len() {
-        3 => {
-            // x.y.z
-            Ok(Semver{
-                alpha: 0,
-                major: parts[0].parse()?,
-                minor: parts[1].parse()?,
-                patch: parts[2].parse()?,
-            })
-        },
-        4 => {
-            // x.y.z.a
-                Ok(Semver{
-                alpha: parts[3].parse()?,
-                major: parts[0].parse()?,
-                minor: parts[1].parse()?,
-                patch: parts[2].parse()?,
-            })
-        }
-
-        _ => bail!("Invalid format of the version! Expected semver or extended semver (x.y.z.a)")
     }
 }
 
@@ -113,7 +87,7 @@ fn package_file(private_key_file: String, version: String, installer_path: Strin
     let kp = MlDsa87::from_seed((&private_key_contents[8..32 + 8]).try_into().unwrap());
     let signing_key = kp.signing_key();
 
-    let semver = parse_semver(&version).unwrap();
+    let semver = Semver::parse(&version).unwrap();
     let additional_header = AdditionalMetadata {
         length: SECOND_STAGE_OFFSET + installer_length,
         semver,
@@ -127,6 +101,7 @@ fn package_file(private_key_file: String, version: String, installer_path: Strin
 
     let mut buffer: [u8; 512] = [0; 512];
     let mut cursor = 0;
+    hasher.update(&serialized_additional_header);
     while cursor < installer_length {
         let part_size = 512u64.min(installer_length - cursor) as usize;
         installer_image.read_exact(&mut buffer[0..part_size])?;

@@ -1,10 +1,10 @@
 use ml_dsa::{MlDsa87, Signature, VerifyingKey, signature::Verifier};
 use sha2::{Digest, Sha512};
 
-use crate::{errors::FirmwareFileError, structs::{ADDITIONAL_METADATA_OFFSET, AdditionalMetadata}, traits::{FirmwareFileProvider, FirmwareUpdateTrigger, KeyProvider}};
+use crate::{errors::FirmwareFileError, structs::{ADDITIONAL_METADATA_OFFSET, AdditionalMetadata}, traits::{FirmwareFileProvider, FirmwareUpdateEffector, KeyProvider}};
 
 // Checks the main header and all signatures.
-pub fn validate_main_header(key_provider: &dyn KeyProvider, data_provider: &mut dyn FirmwareFileProvider) -> Result<(), FirmwareFileError> {
+fn validate_main_header(key_provider: &dyn KeyProvider, data_provider: &mut dyn FirmwareFileProvider) -> Result<(), FirmwareFileError> {
     // Skip to just after the magic:
     data_provider.seek(8);
     let mut key_id_bytes: [u8; 8] = [0; 8];
@@ -28,13 +28,13 @@ pub fn validate_main_header(key_provider: &dyn KeyProvider, data_provider: &mut 
     while cursor < total_length {
         let part_size = 512u64.min(total_length - cursor);
         data_provider.read_exact(&mut buffer[0..part_size as usize])?;
-        hasher.update(&buffer);
+        hasher.update(&buffer[0..part_size as usize]);
         cursor += part_size;
     }
 
     // Check if the SHAsums match:
     let calculated_digest = hasher.finalize();
-    if calculated_digest.as_slice() != provided_signature {
+    if calculated_digest.as_slice() != provided_sha_sum_of_rest {
         return Err(FirmwareFileError::ChecksumMismatch);
     }
 
@@ -54,7 +54,7 @@ pub fn validate_main_header(key_provider: &dyn KeyProvider, data_provider: &mut 
     Ok(())
 }
 
-pub fn validate_magic_and_additional_metadata(data_provider: &mut dyn FirmwareFileProvider, trigger: &dyn FirmwareUpdateTrigger) -> Result<(), FirmwareFileError> {
+fn validate_magic_and_additional_metadata(data_provider: &mut dyn FirmwareFileProvider, trigger: &dyn FirmwareUpdateEffector) -> Result<(), FirmwareFileError> {
     data_provider.seek(0);
     let mut magic: [u8; 8] = [0; 8];
     data_provider.read_exact(&mut magic)?;
@@ -76,15 +76,25 @@ pub fn validate_magic_and_additional_metadata(data_provider: &mut dyn FirmwareFi
     }
 }
 
-pub fn perform_update(
+pub fn validate_update(
     key_provider: &dyn KeyProvider,
     data_provider: &mut dyn FirmwareFileProvider,
-    trigger: &dyn FirmwareUpdateTrigger,
+    trigger: &dyn FirmwareUpdateEffector,
 ) -> Result<(), FirmwareFileError> {
     // Read whether or not we're even compatible with this firmware update:
     validate_magic_and_additional_metadata(data_provider, trigger)?;
     // Read the main header (and check signatures):
     validate_main_header(key_provider, data_provider)?;
+
+    Ok(())
+}
+
+pub fn validate_and_perform_update(
+    key_provider: &dyn KeyProvider,
+    data_provider: &mut dyn FirmwareFileProvider,
+    trigger: &dyn FirmwareUpdateEffector,
+) -> Result<(), FirmwareFileError> {
+    validate_update(key_provider, data_provider, trigger)?;
     // Export second stage updater
-    trigger.export_and_execute(data_provider)
+    trigger.export(data_provider)
 }

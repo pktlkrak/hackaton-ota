@@ -8,5 +8,5 @@ anyhow = "1.0.102"
 clap = { version = "4.6.1", features = ["derive"] }
 getrandom = { version = "0.4.2", features = ["sys_rng"] }
 ml-dsa = { version = "0.1.0-rc.9", features = ["pkcs8"] }
-firststage = { path = "../firststage" }
+firststage = { path = "../firststage", features = ["parsing"] }
 sha2 = "0.11.0"

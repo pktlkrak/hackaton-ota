@@ -1,5 +1,3 @@
-use core::{error::Error, fmt::Display};
-
 use crate::{errors::FirmwareFileError, structs::AdditionalMetadata};
 
 
@@ -10,11 +8,11 @@ pub trait FirmwareFileProvider {
     fn read_exact(&mut self, destination: &mut [u8]) -> Result<(), FirmwareFileError>;
 }
 
-pub trait FirmwareUpdateTrigger {
+pub trait FirmwareUpdateEffector {
     fn check_if_compatible(&self, metadata: &AdditionalMetadata) -> Result<(), FirmwareFileError>;
     // This function shall not return. It shall take over the execution environment until the end.
     // After this has been triggered, the control shall be ceded to the second stage permanently.
-    fn export_and_execute(&self, source: &mut dyn FirmwareFileProvider) -> Result<(), FirmwareFileError>;
+    fn export(&self, source: &mut dyn FirmwareFileProvider) -> Result<(), FirmwareFileError>;
 }
 
 pub trait KeyProvider {

@@ -1,7 +1,9 @@
-use std::{fs::{self, File}, io::{Read, Seek, Write}, path::PathBuf, process::exit};
+use std::{fs::{self, File}, io::{Read, Seek, Write}, path::PathBuf};
 
 use anyhow::{Result, bail};
-use firststage::{errors::FirmwareFileError, structs::Semver, traits::{FirmwareFileProvider, FirmwareUpdateTrigger, KeyProvider}};
+use firststage::{errors::FirmwareFileError, structs::Semver, traits::{FirmwareFileProvider, FirmwareUpdateEffector, KeyProvider}};
+
+pub const TRIGGER_UPDATE_FILE: i32 = 123;
 
 pub struct FSFirmwareFileProvider {
     file: File,
@@ -78,12 +80,22 @@ impl KeyProvider for FSKeyProvider {
     }
 }
 
-struct FSFirmwareUpdateTrigger {
-    destination_path: String,
+pub struct FSFirmwareUpdateEffector {
+    destination_path: Option<String>,
     current_ver: Semver,
 }
 
-impl FirmwareUpdateTrigger for FSFirmwareUpdateTrigger {
+impl FSFirmwareUpdateEffector {
+    pub fn new(current_ver: Semver, destination: &str) -> Self{
+        Self { current_ver, destination_path: Some(destination.to_string()) }
+    }
+
+    pub fn new_validation_only(current_ver: Semver) -> Self {
+        Self { current_ver, destination_path: None }
+    }
+}
+
+impl FirmwareUpdateEffector for FSFirmwareUpdateEffector {
     fn check_if_compatible(&self, metadata: &firststage::structs::AdditionalMetadata) -> std::prelude::v1::Result<(), FirmwareFileError> {
         if self.current_ver >= metadata.semver {
             println!("Firmware downgrade attempt detected!");
@@ -93,29 +105,33 @@ impl FirmwareUpdateTrigger for FSFirmwareUpdateTrigger {
         }
     }
 
-    fn export_and_execute(&self, source: &mut dyn FirmwareFileProvider) -> Result<(), FirmwareFileError> {
-        let mut cursor = source.tell();
-        let size = source.get_file_length();
-        let mut buffer = [0u8; 512];
-        let mut output_file = match File::create(self.destination_path.clone()) {
-            Err(e) => {
-                println!("Failed to create the destination file: {e:?}");
-                return Err(FirmwareFileError::WriteError)
-            },
-            Ok(e) => e,
-        };
+    fn export(&self, source: &mut dyn FirmwareFileProvider) -> Result<(), FirmwareFileError> {
+        if let Some(destination_path) = &self.destination_path {
+            let mut cursor = source.tell();
+            let size = source.get_file_length();
+            let mut buffer = [0u8; 512];
+            let mut output_file = match File::create(destination_path.clone()) {
+                Err(e) => {
+                    println!("Failed to create the destination file: {e:?}");
+                    return Err(FirmwareFileError::WriteError)
+                },
+                Ok(e) => e,
+            };
 
-        while cursor < size {
-            let chunk = buffer.len().min((size - cursor) as usize);
-            let subbuff = &mut buffer[0..chunk];
-            if source.read_exact(subbuff).is_err() {
-                return Err(FirmwareFileError::ReadError);
+            while cursor < size {
+                let chunk = buffer.len().min((size - cursor) as usize);
+                let subbuff = &mut buffer[0..chunk];
+                if source.read_exact(subbuff).is_err() {
+                    return Err(FirmwareFileError::ReadError);
+                }
+                cursor += chunk as u64;
+                if output_file.write_all(subbuff).is_err() {
+                    return Err(FirmwareFileError::ReadError);
+                }
             }
-            cursor += chunk as u64;
-            if output_file.write_all(subbuff).is_err() {
-                return Err(FirmwareFileError::ReadError);
-            }
+            Ok(())
+        } else {
+            Err(FirmwareFileError::WriteError)
         }
-        exit(1);
     }
 }

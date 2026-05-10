@@ -1,5 +1,3 @@
-use sha2::digest::typenum::Compare;
-
 use crate::errors::FirmwareFileError;
 
 pub const ADDITIONAL_METADATA_OFFSET: u64 = 8 + 8 + 64 + 4627;
@@ -12,6 +10,37 @@ pub struct Semver {
     pub minor: u16,
     pub patch: u16,
     pub alpha: u16,
+}
+
+#[cfg(feature = "parsing")]
+impl Semver {
+    pub fn parse(string: &str) -> anyhow::Result<Semver> {
+        use alloc::vec::Vec;
+
+        let parts: Vec<_> = string.split('.').collect();
+        match parts.len() {
+            3 => {
+                // x.y.z
+                Ok(Semver{
+                    alpha: 0,
+                    major: parts[0].parse()?,
+                    minor: parts[1].parse()?,
+                    patch: parts[2].parse()?,
+                })
+            },
+            4 => {
+                // x.y.z.a
+                    Ok(Semver{
+                    major: parts[0].parse()?,
+                    minor: parts[1].parse()?,
+                    patch: parts[2].parse()?,
+                    alpha: parts[3].parse()?,
+                })
+            }
+
+            _ => anyhow::bail!("Invalid format of the version! Expected semver or extended semver (x.y.z.a)")
+        }
+    }
 }
 
 impl PartialOrd for Semver {
