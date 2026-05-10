@@ -1,6 +1,5 @@
 use crate::{errors::FirmwareFileError, structs::AdditionalMetadata};
 
-
 pub trait FirmwareFileProvider {
     fn seek(&mut self, offset: u64);
     fn tell(&mut self) -> u64;

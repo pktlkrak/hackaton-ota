@@ -2,13 +2,15 @@ use std::fs::{self, File};
 use std::io::{Read, Seek, Write};
 
 use anyhow::{Result, bail};
-use clap::{Subcommand, Parser};
-use firststage::structs::{ADDITIONAL_METADATA_OFFSET, AdditionalMetadata, SECOND_STAGE_OFFSET, Semver};
+use clap::{Parser, Subcommand};
+use firststage::structs::{
+    ADDITIONAL_METADATA_OFFSET, AdditionalMetadata, SECOND_STAGE_OFFSET, Semver,
+};
 use getrandom::SysRng;
-use ml_dsa::{KeyGen, MlDsa87, signature::rand_core::UnwrapErr};
 use ml_dsa::signature::Keypair;
-use sha2::{Digest, Sha512};
 use ml_dsa::signature::Signer;
+use ml_dsa::{KeyGen, MlDsa87, signature::rand_core::UnwrapErr};
+use sha2::{Digest, Sha512};
 
 /// Package an installer into an xdu file
 #[derive(Parser, Debug)]
@@ -39,12 +41,12 @@ enum Commands {
         #[arg(long)]
         version: String,
 
-        /// Installer to package 
+        /// Installer to package
         installer_path: String,
 
         /// Output file
-        output: String
-    }
+        output: String,
+    },
 }
 
 fn main() {
@@ -55,16 +57,22 @@ fn main() {
             let kp = MlDsa87::key_gen(&mut rng);
             let key_seed: [u8; 32] = kp.to_seed().try_into().unwrap();
             let veri_key = kp.verifying_key().encode();
-            
+
             let mut priv_key = File::create(format!("{file_path}.prv")).unwrap();
             priv_key.write_all(&id.to_le_bytes()).unwrap();
             priv_key.write_all(&key_seed).unwrap();
 
             std::fs::write(format!("{file_path}.key"), veri_key).unwrap();
             println!("Keys generated")
-        },
-        Commands::Package { private_key_file, version, installer_path, output } => {
-            if let Err(x) = package_file(private_key_file, version, installer_path, output.clone()) {
+        }
+        Commands::Package {
+            private_key_file,
+            version,
+            installer_path,
+            output,
+        } => {
+            if let Err(x) = package_file(private_key_file, version, installer_path, output.clone())
+            {
                 // Make sure the output doesn't exist if it crashes.
                 let _ = std::fs::remove_file(output);
                 println!("Error: {x:?}");
@@ -73,8 +81,12 @@ fn main() {
     }
 }
 
-
-fn package_file(private_key_file: String, version: String, installer_path: String, output: String) -> Result<()> {
+fn package_file(
+    private_key_file: String,
+    version: String,
+    installer_path: String,
+    output: String,
+) -> Result<()> {
     let private_key_contents = fs::read(private_key_file)?;
     if private_key_contents.len() != (32 + 8) {
         bail!("Incorrect private key length!");
@@ -95,7 +107,9 @@ fn package_file(private_key_file: String, version: String, installer_path: Strin
     let mut serialized_additional_header = [0u8; 16];
     additional_header.serialize(&mut serialized_additional_header);
 
-    output.write_all(&vec![0; ADDITIONAL_METADATA_OFFSET as usize]).unwrap();
+    output
+        .write_all(&vec![0; ADDITIONAL_METADATA_OFFSET as usize])
+        .unwrap();
     output.write_all(&serialized_additional_header)?;
     let mut hasher = Sha512::new();
 

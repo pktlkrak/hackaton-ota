@@ -21,16 +21,16 @@ impl Semver {
         match parts.len() {
             3 => {
                 // x.y.z
-                Ok(Semver{
+                Ok(Semver {
                     alpha: 0,
                     major: parts[0].parse()?,
                     minor: parts[1].parse()?,
                     patch: parts[2].parse()?,
                 })
-            },
+            }
             4 => {
                 // x.y.z.a
-                    Ok(Semver{
+                Ok(Semver {
                     major: parts[0].parse()?,
                     minor: parts[1].parse()?,
                     patch: parts[2].parse()?,
@@ -38,7 +38,9 @@ impl Semver {
                 })
             }
 
-            _ => anyhow::bail!("Invalid format of the version! Expected semver or extended semver (x.y.z.a)")
+            _ => anyhow::bail!(
+                "Invalid format of the version! Expected semver or extended semver (x.y.z.a)"
+            ),
         }
     }
 }
@@ -51,7 +53,8 @@ impl PartialOrd for Semver {
 
 impl Ord for Semver {
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        self.major.cmp(&other.major)
+        self.major
+            .cmp(&other.major)
             .then(self.minor.cmp(&other.minor))
             .then(self.patch.cmp(&other.patch))
             .then(self.alpha.cmp(&other.alpha))
@@ -72,8 +75,13 @@ impl AdditionalMetadata {
 
         let length = u64::from_le_bytes((&data[8..16]).try_into().unwrap());
         Ok(Self {
-            semver: Semver { major, minor, patch, alpha },
-            length
+            semver: Semver {
+                major,
+                minor,
+                patch,
+                alpha,
+            },
+            length,
         })
     }
 

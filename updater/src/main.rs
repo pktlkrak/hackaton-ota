@@ -1,11 +1,21 @@
 mod local_fs_impl;
-use std::{env::temp_dir, fs::{self, File, OpenOptions}, process::exit, time::Duration};
+use std::{
+    env::temp_dir,
+    fs::{self, File, OpenOptions},
+    process::exit,
+    time::Duration,
+};
 
 use clap::{Parser, Subcommand};
-use firststage::{core::{validate_and_perform_update, validate_update}, structs::Semver};
+use firststage::{
+    core::{validate_and_perform_update, validate_update},
+    structs::Semver,
+};
 use reqwest::{Certificate, Url};
 
-use crate::local_fs_impl::{FSFirmwareFileProvider, FSFirmwareUpdateEffector, FSKeyProvider, TRIGGER_UPDATE_FILE};
+use crate::local_fs_impl::{
+    FSFirmwareFileProvider, FSFirmwareUpdateEffector, FSKeyProvider, TRIGGER_UPDATE_FILE,
+};
 
 /// Package an installer into an xdu file
 #[derive(Parser, Debug)]
@@ -59,10 +69,8 @@ enum Commands {
 
         /// Base Server URL
         server: String,
-    }
+    },
 }
-
-
 
 fn main() {
     /*let args = Cli {
@@ -81,7 +89,7 @@ fn main() {
             } else {
                 println!("Update file valid for the current version.");
             }
-        },
+        }
         Commands::ExtractFile { file, destination } => {
             let file = File::open(file).unwrap();
             let mut source = FSFirmwareFileProvider::new(file);
@@ -92,14 +100,24 @@ fn main() {
                 println!("Update file extracted.");
             }
         }
-        Commands::Check { installer_to_write, serial, cert_dir, server: base_server_url, timeout } => {
-            let mut client = reqwest::blocking::ClientBuilder::new().timeout(Some(Duration::from_millis(timeout.unwrap_or(2000))));
+        Commands::Check {
+            installer_to_write,
+            serial,
+            cert_dir,
+            server: base_server_url,
+            timeout,
+        } => {
+            let mut client = reqwest::blocking::ClientBuilder::new()
+                .timeout(Some(Duration::from_millis(timeout.unwrap_or(2000))));
             if let Some(cert_dir) = cert_dir {
                 let mut certs = vec![];
                 for file in fs::read_dir(cert_dir).unwrap() {
                     let entry = file.unwrap();
                     match Certificate::from_der(&fs::read(entry.path()).unwrap()) {
-                        Err(error) => println!("Error parsing certificate {}: {error:?}", entry.path().display()),
+                        Err(error) => println!(
+                            "Error parsing certificate {}: {error:?}",
+                            entry.path().display()
+                        ),
                         Ok(cert) => {
                             certs.push(cert);
                         }
@@ -108,29 +126,32 @@ fn main() {
                 client = client.tls_certs_only(certs);
             }
 
+            // DISABLE IN PRODUCTION ENVIRONMENT!!! :
             client = client.tls_danger_accept_invalid_certs(true);
 
             let client = client.build().unwrap();
             let base_url = Url::parse(&base_server_url).unwrap();
-            
+
             let mut ver_query_url = base_url.clone();
             ver_query_url.set_path("/get_newest");
-            ver_query_url.query_pairs_mut().append_pair("serial", &serial);
+            ver_query_url
+                .query_pairs_mut()
+                .append_pair("serial", &serial);
 
             let response = client.get(ver_query_url).send().unwrap().text().unwrap();
             // Should respond with:
             // <semver> <file to download>
             let parts: Vec<_> = response.split(' ').collect();
             let semver = if parts.len() == 2 {
-                    match Semver::parse(parts[0]) {
-                        Ok(e) => e,
-                        Err(e) => {
-                            panic!("Server sent invalid semver: {e}");
-                        }
+                match Semver::parse(parts[0]) {
+                    Ok(e) => e,
+                    Err(e) => {
+                        panic!("Server sent invalid semver: {e}");
                     }
-                } else {
-                    panic!("Invalid response from server");
-                };
+                }
+            } else {
+                panic!("Invalid response from server");
+            };
             if semver <= current_ver {
                 println!("Up to date.");
                 return;
@@ -141,12 +162,18 @@ fn main() {
             file_fetch_url.path_segments_mut().unwrap().push(parts[1]);
             let mut update_file_response = client.get(file_fetch_url).send().unwrap();
             let temp_file_path = temp_dir().join(format!("temporary-{serial}.xdu"));
-            let mut temporary_file = OpenOptions::new().create(true).write(true).truncate(true).read(true).open(&temp_file_path).unwrap();
+            let mut temporary_file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .read(true)
+                .open(&temp_file_path)
+                .unwrap();
             update_file_response.copy_to(&mut temporary_file).unwrap();
             let effector = FSFirmwareUpdateEffector::new(current_ver, &installer_to_write);
             let mut source = FSFirmwareFileProvider::new(temporary_file);
             validate_and_perform_update(&key_provider, &mut source, &effector).unwrap();
-            
+
             // fs::remove_file(&temp_file_path).unwrap();
             exit(TRIGGER_UPDATE_FILE);
         }

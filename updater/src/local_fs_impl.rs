@@ -1,7 +1,15 @@
-use std::{fs::{self, File}, io::{Read, Seek, Write}, path::PathBuf};
+use std::{
+    fs::{self, File},
+    io::{Read, Seek, Write},
+    path::PathBuf,
+};
 
 use anyhow::{Result, bail};
-use firststage::{errors::FirmwareFileError, structs::Semver, traits::{FirmwareFileProvider, FirmwareUpdateEffector, KeyProvider}};
+use firststage::{
+    errors::FirmwareFileError,
+    structs::Semver,
+    traits::{FirmwareFileProvider, FirmwareUpdateEffector, KeyProvider},
+};
 
 pub const TRIGGER_UPDATE_FILE: i32 = 123;
 
@@ -21,7 +29,7 @@ impl FirmwareFileProvider for FSFirmwareFileProvider {
     fn get_file_length(&self) -> u64 {
         self.file.metadata().unwrap().len()
     }
-    
+
     fn read_exact(&mut self, destination: &mut [u8]) -> Result<(), FirmwareFileError> {
         if let Err(err) = self.file.read_exact(destination) {
             println!("E {err:?}");
@@ -87,17 +95,26 @@ pub struct FSFirmwareUpdateEffector {
 }
 
 impl FSFirmwareUpdateEffector {
-    pub fn new(current_ver: Semver, destination: &str) -> Self{
-        Self { current_ver, destination_path: Some(destination.to_string()) }
+    pub fn new(current_ver: Semver, destination: &str) -> Self {
+        Self {
+            current_ver,
+            destination_path: Some(destination.to_string()),
+        }
     }
 
     pub fn new_validation_only(current_ver: Semver) -> Self {
-        Self { current_ver, destination_path: None }
+        Self {
+            current_ver,
+            destination_path: None,
+        }
     }
 }
 
 impl FirmwareUpdateEffector for FSFirmwareUpdateEffector {
-    fn check_if_compatible(&self, metadata: &firststage::structs::AdditionalMetadata) -> std::prelude::v1::Result<(), FirmwareFileError> {
+    fn check_if_compatible(
+        &self,
+        metadata: &firststage::structs::AdditionalMetadata,
+    ) -> std::prelude::v1::Result<(), FirmwareFileError> {
         if self.current_ver >= metadata.semver {
             println!("Firmware downgrade attempt detected!");
             Err(FirmwareFileError::DowngradeAttempted)
@@ -115,8 +132,8 @@ impl FirmwareUpdateEffector for FSFirmwareUpdateEffector {
             let mut output_file = match File::create(destination_path.clone()) {
                 Err(e) => {
                     println!("Failed to create the destination file: {e:?}");
-                    return Err(FirmwareFileError::WriteError)
-                },
+                    return Err(FirmwareFileError::WriteError);
+                }
                 Ok(e) => e,
             };
 
