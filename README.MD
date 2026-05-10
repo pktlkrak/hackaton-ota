@@ -16,3 +16,7 @@ A new generation update verification system.
 
 - Generating keypairs required for signing the update files
 - Signing the files with the xdupdate header
+
+### Server
+
+- Dividing users into cohorts so as to roll updates out in waves
