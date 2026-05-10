@@ -7,7 +7,6 @@ import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManagerFactory;
-import java.awt.*;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -24,6 +23,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.List;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
@@ -74,29 +74,56 @@ class HttpsServer {
         }
     }
 
+    static boolean areOnlyUniqueVersions() throws IOException {
+        var files = Files.walk(UPDATES_PATH).filter(Files::isRegularFile);
+        List<String> uniquePaths = new ArrayList<>();
+        AtomicBoolean result = new AtomicBoolean(true);
+
+        files.forEach(file -> {
+            if(uniquePaths.contains(file.getFileName().toString()) && (!file.getFileName().toString().equals( "conf.txt"))) {
+                result.set(false);
+                return;
+                }
+            uniquePaths.add(file.getFileName().toString());
+        });
+        return result.get();
+    }
+
     static void main() throws Exception {
 
+        Log(0, "Loading config...");
         loadConfig(Path.of("./server_config.txt"));
 
+//        Log(0, "Updates version control...");
+//        if(!areOnlyUniqueVersions()){
+//            Log(4, "Updates version control failed!");
+//            return;
+//        }
+
         // 1. Załaduj keystore z certyfikatem serwera
+        Log(0, "Loading keyStore...");
         KeyStore ks = KeyStore.getInstance("JKS");
         try (FileInputStream fis = new FileInputStream(KEYSTORE)) {
             ks.load(fis, KS_PASS.toCharArray());
         }
 
         // 2. Skonfiguruj KeyManager (klucz prywatny + certyfikat)
+        Log(0, "Loading keyManager...");
         KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
         kmf.init(ks, KEY_PASS.toCharArray());
 
         // 3. Skonfiguruj TrustManager (dla self-signed możemy ufać własnym certom)
+        Log(0, "Loading trustManager...");
         TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
         tmf.init(ks);
 
         // 4. Zainicjalizuj SSLContext z TLS
+        Log(0, "Initialize ssl/tls...");
         SSLContext sslContext = SSLContext.getInstance("TLS");
         sslContext.init(kmf.getKeyManagers(), tmf.getTrustManagers(), new SecureRandom());
 
         // 5. Utwórz serwer HTTPS
+        Log(0, "Opening https port...");
         com.sun.net.httpserver.HttpsServer server =
                 com.sun.net.httpserver.HttpsServer.create(new InetSocketAddress(PORT), 0);
 
@@ -109,14 +136,16 @@ class HttpsServer {
             }
         });
 
+
         // 6. Rejestracja endpointów
+        Log(0, "Starting https endpoints...");
         server.createContext("/get_newest", new DefaultHandler());
         server.createContext("/files/", new FileHandler());
 
         server.setExecutor(Executors.newFixedThreadPool(10));
         server.start();
 
-        System.out.println("Serwer HTTPS uruchomiony na https://localhost:" + PORT);
+        Log(1, "Serwer HTTPS uruchomiony na https://localhost:" + PORT);
     }
 
     static Map<String, String> parseQuery(String query) throws IllegalArgumentException {
@@ -190,31 +219,52 @@ class HttpsServer {
 
 
     public static class FileHandler implements HttpHandler {
-        static final Path BASE_PATH = Path.of("./updates");
 
         @Override
         public void handle(HttpExchange ex) throws IOException {
 
             if (!ex.getRequestMethod().equalsIgnoreCase("GET")) {
+                Log(405, "Unsupported HTTP method: " + ex.getRequestMethod());
                 ex.sendResponseHeaders(405, -1);
                 return;
             }
 
 
             String rawPath = ex.getRequestURI().getPath();
-            String filename = rawPath.substring("/files/".length()).split("/")[0];
+            var segments = rawPath.substring("/files/".length()).split("/");
+            if(segments.length != 2) {
+                Log(405, "Invalid path: " + rawPath);
+                ex.sendResponseHeaders(405, -1);
+            }
 
-            if (filename.isBlank()) {
-                sendText(ex, 400, "Brak nazwy pliku.");
+            Path filePath = UPDATES_PATH.resolve( Path.of("%s/%s".formatted(segments[0], segments[1])));
+
+
+            if (!Files.exists(filePath)) {
+                Log(405, "Invalid path: " + rawPath);
+                sendText(ex, 454, "Invalid path: " + rawPath);
                 return;
             }
 
+            if(!filePath.toString().endsWith(".xdu")){
+                Log(405, "Invalid extension: " + rawPath);
+                sendText(ex, 454, "Invalid extension: " + rawPath);
+            }
+
             AtomicReference<Path> wantedFile = new AtomicReference<>(Path.of(""));
-            Files.walk(BASE_PATH).filter(Files::isRegularFile).forEach(file -> {
-                if (file.getFileName().toString().endsWith(".xdu") && file.getFileName().toString().equals(filename)) {
+            Files.walk(UPDATES_PATH,2).filter(Files::isRegularFile).forEach(file -> {
+                ;
+
+                if(filePath.toString().equals(file.toString())) {
                     wantedFile.set(file);
                 }
             });
+
+            if(wantedFile.get().equals(Path.of(""))) {
+                Log(404, "File not found!");
+                sendText(ex, 404, "File not found!");
+                return;
+            }
 
             sendFile(ex, 200, wantedFile.get());
         }
@@ -243,11 +293,12 @@ class HttpsServer {
 
             if (p.containsKey("serial")) {
                 var fileName = getLatestVersion(p.get("serial"));
-                var version = fileName.substring(0, fileName.indexOf(".xdu"));
+                var version = fileName.substring(0, fileName.indexOf(".xdu")).split("/")[1];
                 sendText(ex, 200, "%s %s".formatted(version, fileName));
-            } else
+            } else {
+                Log(404, "No query found!");
                 sendText(ex, 404, "Not provided serial number");
-
+            }
 
         }
 
@@ -261,21 +312,22 @@ class HttpsServer {
                 if (ser.equals(device)) {
                     var version = getVersionForCohort(serial_number, Path.of(UPDATES_PATH + "/" + ser + "/conf.txt"));
                     if (Files.exists(Path.of(UPDATES_PATH + "/%s/".formatted(device) + version))) {
-                        return version;
+                        return ser + "/" + version;
                     } else
                         return "Update file error. Contact administrator";
                 }
             }
+            Log(404, "Unknown serial number %s!".formatted(serial_number));
             return "Unknown device";
         }
 
-        static List<String> getAvailableDeviceSeries() {
+        static List<String> getAvailableDeviceSeries() throws IOException {
             var deviceSeries = new ArrayList<String>();
             try {
                 var paths = Files.walk(UPDATES_PATH).filter(Files::isDirectory);
                 paths.forEach(path -> deviceSeries.add(path.getFileName().toString()));
             } catch (IOException e) {
-                e.printStackTrace();
+                Log(4, e.toString());
             }
             deviceSeries.remove(UPDATES_PATH.getFileName().toString());
 
