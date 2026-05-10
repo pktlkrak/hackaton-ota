@@ -2,7 +2,7 @@ use ml_dsa::{MlDsa87, Signature, VerifyingKey, signature::Verifier};
 use sha2::{Digest, Sha512};
 
 use crate::{
-    errors::UpdateFileErro,
+    errors::UpdateFileError,
     structs::{ADDITIONAL_METADATA_OFFSET, AdditionalMetadata, SECOND_STAGE_OFFSET},
     traits::{UpdateFileProvider, UpdateEffector, KeyProvider},
 };
@@ -11,7 +11,7 @@ use crate::{
 fn validate_main_header(
     key_provider: &dyn KeyProvider,
     data_provider: &mut dyn UpdateFileProvider,
-) -> Result<(), UpdateFileErro> {
+) -> Result<(), UpdateFileError> {
     // Skip to just after the magic:
     data_provider.seek(8);
     let mut key_id_bytes: [u8; 8] = [0; 8];
@@ -41,26 +41,26 @@ fn validate_main_header(
     // Check if the SHAsums match:
     let calculated_digest = hasher.finalize();
     if calculated_digest.as_slice() != provided_sha_sum_of_rest {
-        return Err(UpdateFileErro::ChecksumMismatch);
+        return Err(UpdateFileError::ChecksumMismatch);
     }
 
     // And if the signature is correct:
     let verifying_key: VerifyingKey<MlDsa87> = VerifyingKey::decode(
         (&key_provider
             .get_mldsa87_pubkey(key_id)
-            .ok_or(UpdateFileErro::KeyNotFound)?)
+            .ok_or(UpdateFileError::KeyNotFound)?)
             .try_into()
             .unwrap(),
     );
 
     let signature = Signature::decode((&provided_signature).try_into().unwrap())
-        .ok_or(UpdateFileErro::SignatureError)?;
+        .ok_or(UpdateFileError::SignatureError)?;
 
     if verifying_key
         .verify(&provided_sha_sum_of_rest, &signature)
         .is_err()
     {
-        return Err(UpdateFileErro::SignatureError);
+        return Err(UpdateFileError::SignatureError);
     }
 
     // If this stage has been reached, the file should be valid.
@@ -71,12 +71,12 @@ fn validate_main_header(
 fn validate_magic_and_additional_metadata(
     data_provider: &mut dyn UpdateFileProvider,
     trigger: &dyn UpdateEffector,
-) -> Result<(), UpdateFileErro> {
+) -> Result<(), UpdateFileError> {
     data_provider.seek(0);
     let mut magic: [u8; 8] = [0; 8];
     data_provider.read_exact(&mut magic)?;
     if magic != "UPXD0001".as_bytes() {
-        return Err(UpdateFileErro::IncorrectMagic);
+        return Err(UpdateFileError::IncorrectMagic);
     }
 
     // Seek to additional metadata section:
@@ -87,7 +87,7 @@ fn validate_magic_and_additional_metadata(
 
     trigger.check_if_compatible(&metadata)?;
     if metadata.length != data_provider.get_file_length() {
-        Err(UpdateFileErro::LengthMismatch)
+        Err(UpdateFileError::LengthMismatch)
     } else {
         Ok(())
     }
@@ -97,7 +97,7 @@ pub fn validate_update(
     key_provider: &dyn KeyProvider,
     data_provider: &mut dyn UpdateFileProvider,
     trigger: &dyn UpdateEffector,
-) -> Result<(), UpdateFileErro> {
+) -> Result<(), UpdateFileError> {
     // Read whether or not we're even compatible with this update:
     validate_magic_and_additional_metadata(data_provider, trigger)?;
     // Read the main header (and check signatures):
@@ -110,7 +110,7 @@ pub fn validate_and_perform_update(
     key_provider: &dyn KeyProvider,
     data_provider: &mut dyn UpdateFileProvider,
     trigger: &dyn UpdateEffector,
-) -> Result<(), UpdateFileErro> {
+) -> Result<(), UpdateFileError> {
     validate_update(key_provider, data_provider, trigger)?;
     // Export second stage updater
     data_provider.seek(SECOND_STAGE_OFFSET);

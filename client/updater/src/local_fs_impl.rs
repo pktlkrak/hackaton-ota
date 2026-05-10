@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{Result, bail};
 use firststage::{
-    errors::UpdateFileErro,
+    errors::UpdateFileError,
     structs::Semver,
     traits::{UpdateFileProvider, UpdateEffector, KeyProvider},
 };
@@ -30,10 +30,10 @@ impl UpdateFileProvider for FSUpdateFileProvider {
         self.file.metadata().unwrap().len()
     }
 
-    fn read_exact(&mut self, destination: &mut [u8]) -> Result<(), UpdateFileErro> {
+    fn read_exact(&mut self, destination: &mut [u8]) -> Result<(), UpdateFileError> {
         if let Err(err) = self.file.read_exact(destination) {
             println!("File Reading Error: {err}");
-            Err(UpdateFileErro::ReadError)
+            Err(UpdateFileError::ReadError)
         } else {
             Ok(())
         }
@@ -114,16 +114,16 @@ impl UpdateEffector for FSUpdateEffector {
     fn check_if_compatible(
         &self,
         metadata: &firststage::structs::AdditionalMetadata,
-    ) -> std::prelude::v1::Result<(), UpdateFileErro> {
+    ) -> std::prelude::v1::Result<(), UpdateFileError> {
         if self.current_ver >= metadata.semver {
             println!("Downgrade attempt detected!");
-            Err(UpdateFileErro::DowngradeAttempted)
+            Err(UpdateFileError::DowngradeAttempted)
         } else {
             Ok(())
         }
     }
 
-    fn export(&self, source: &mut dyn UpdateFileProvider) -> Result<(), UpdateFileErro> {
+    fn export(&self, source: &mut dyn UpdateFileProvider) -> Result<(), UpdateFileError> {
         if let Some(destination_path) = &self.destination_path {
             let mut cursor = source.tell();
             let size = source.get_file_length();
@@ -131,7 +131,7 @@ impl UpdateEffector for FSUpdateEffector {
             let mut output_file = match File::create(destination_path.clone()) {
                 Err(e) => {
                     println!("Failed to create the destination file: {e:?}");
-                    return Err(UpdateFileErro::WriteError);
+                    return Err(UpdateFileError::WriteError);
                 }
                 Ok(e) => e,
             };
@@ -140,16 +140,16 @@ impl UpdateEffector for FSUpdateEffector {
                 let chunk = buffer.len().min((size - cursor) as usize);
                 let subbuff = &mut buffer[0..chunk];
                 if source.read_exact(subbuff).is_err() {
-                    return Err(UpdateFileErro::ReadError);
+                    return Err(UpdateFileError::ReadError);
                 }
                 cursor += chunk as u64;
                 if output_file.write_all(subbuff).is_err() {
-                    return Err(UpdateFileErro::WriteError);
+                    return Err(UpdateFileError::WriteError);
                 }
             }
             Ok(())
         } else {
-            Err(UpdateFileErro::WriteError)
+            Err(UpdateFileError::WriteError)
         }
     }
 }

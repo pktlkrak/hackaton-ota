@@ -1,7 +1,7 @@
 use core::{error::Error, fmt::Display};
 
 #[derive(Debug)]
-pub enum UpdateFileErro {
+pub enum UpdateFileError {
     IllegalDataFoundInSectionDeclaration,
     IncorrectMagic,
     ChecksumMismatch,
@@ -15,10 +15,10 @@ pub enum UpdateFileErro {
     WriteError,
 }
 
-impl Display for UpdateFileErro {
+impl Display for UpdateFileError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "Update error: {:?}", self)
     }
 }
 
-impl Error for UpdateFileErro {}
+impl Error for UpdateFileError {}
