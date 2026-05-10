@@ -3,3 +3,6 @@
 **/*.key
 **/*.prv
 **/*.jks
+**/.idea
+**/out
+/server/.idea/
