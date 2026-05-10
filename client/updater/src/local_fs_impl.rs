@@ -6,33 +6,34 @@ use std::{
 
 use anyhow::{Result, bail};
 use firststage::{
-    errors::FirmwareFileError,
+    errors::UpdateFileErro,
     structs::Semver,
-    traits::{FirmwareFileProvider, FirmwareUpdateEffector, KeyProvider},
+    traits::{UpdateFileProvider, UpdateEffector, KeyProvider},
 };
 
 pub const TRIGGER_UPDATE_FILE: i32 = 123;
 
-pub struct FSFirmwareFileProvider {
+pub struct FSUpdateFileProvider {
     file: File,
 }
 
-impl FSFirmwareFileProvider {
+impl FSUpdateFileProvider {
     // File should have an exclusive lock!
-    pub fn new(mut file: File) -> FSFirmwareFileProvider {
+    pub fn new(mut file: File) -> FSUpdateFileProvider {
         file.seek(std::io::SeekFrom::Start(0)).unwrap();
-        FSFirmwareFileProvider { file }
+        FSUpdateFileProvider { file }
     }
 }
 
-impl FirmwareFileProvider for FSFirmwareFileProvider {
+impl UpdateFileProvider for FSUpdateFileProvider {
     fn get_file_length(&self) -> u64 {
         self.file.metadata().unwrap().len()
     }
 
-    fn read_exact(&mut self, destination: &mut [u8]) -> Result<(), FirmwareFileError> {
+    fn read_exact(&mut self, destination: &mut [u8]) -> Result<(), UpdateFileErro> {
         if let Err(err) = self.file.read_exact(destination) {
-            Err(FirmwareFileError::ReadError)
+            println!("File Reading Error: {err}");
+            Err(UpdateFileErro::ReadError)
         } else {
             Ok(())
         }
@@ -88,12 +89,12 @@ impl KeyProvider for FSKeyProvider {
     }
 }
 
-pub struct FSFirmwareUpdateEffector {
+pub struct FSUpdateEffector {
     destination_path: Option<String>,
     current_ver: Semver,
 }
 
-impl FSFirmwareUpdateEffector {
+impl FSUpdateEffector {
     pub fn new(current_ver: Semver, destination: &str) -> Self {
         Self {
             current_ver,
@@ -109,20 +110,20 @@ impl FSFirmwareUpdateEffector {
     }
 }
 
-impl FirmwareUpdateEffector for FSFirmwareUpdateEffector {
+impl UpdateEffector for FSUpdateEffector {
     fn check_if_compatible(
         &self,
         metadata: &firststage::structs::AdditionalMetadata,
-    ) -> std::prelude::v1::Result<(), FirmwareFileError> {
+    ) -> std::prelude::v1::Result<(), UpdateFileErro> {
         if self.current_ver >= metadata.semver {
-            println!("Firmware downgrade attempt detected!");
-            Err(FirmwareFileError::DowngradeAttempted)
+            println!("Downgrade attempt detected!");
+            Err(UpdateFileErro::DowngradeAttempted)
         } else {
             Ok(())
         }
     }
 
-    fn export(&self, source: &mut dyn FirmwareFileProvider) -> Result<(), FirmwareFileError> {
+    fn export(&self, source: &mut dyn UpdateFileProvider) -> Result<(), UpdateFileErro> {
         if let Some(destination_path) = &self.destination_path {
             let mut cursor = source.tell();
             let size = source.get_file_length();
@@ -130,7 +131,7 @@ impl FirmwareUpdateEffector for FSFirmwareUpdateEffector {
             let mut output_file = match File::create(destination_path.clone()) {
                 Err(e) => {
                     println!("Failed to create the destination file: {e:?}");
-                    return Err(FirmwareFileError::WriteError);
+                    return Err(UpdateFileErro::WriteError);
                 }
                 Ok(e) => e,
             };
@@ -139,16 +140,16 @@ impl FirmwareUpdateEffector for FSFirmwareUpdateEffector {
                 let chunk = buffer.len().min((size - cursor) as usize);
                 let subbuff = &mut buffer[0..chunk];
                 if source.read_exact(subbuff).is_err() {
-                    return Err(FirmwareFileError::ReadError);
+                    return Err(UpdateFileErro::ReadError);
                 }
                 cursor += chunk as u64;
                 if output_file.write_all(subbuff).is_err() {
-                    return Err(FirmwareFileError::WriteError);
+                    return Err(UpdateFileErro::WriteError);
                 }
             }
             Ok(())
         } else {
-            Err(FirmwareFileError::WriteError)
+            Err(UpdateFileErro::WriteError)
         }
     }
 }

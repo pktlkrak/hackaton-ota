@@ -2,16 +2,16 @@ use ml_dsa::{MlDsa87, Signature, VerifyingKey, signature::Verifier};
 use sha2::{Digest, Sha512};
 
 use crate::{
-    errors::FirmwareFileError,
+    errors::UpdateFileErro,
     structs::{ADDITIONAL_METADATA_OFFSET, AdditionalMetadata, SECOND_STAGE_OFFSET},
-    traits::{FirmwareFileProvider, FirmwareUpdateEffector, KeyProvider},
+    traits::{UpdateFileProvider, UpdateEffector, KeyProvider},
 };
 
 // Checks the main header and all signatures.
 fn validate_main_header(
     key_provider: &dyn KeyProvider,
-    data_provider: &mut dyn FirmwareFileProvider,
-) -> Result<(), FirmwareFileError> {
+    data_provider: &mut dyn UpdateFileProvider,
+) -> Result<(), UpdateFileErro> {
     // Skip to just after the magic:
     data_provider.seek(8);
     let mut key_id_bytes: [u8; 8] = [0; 8];
@@ -41,42 +41,42 @@ fn validate_main_header(
     // Check if the SHAsums match:
     let calculated_digest = hasher.finalize();
     if calculated_digest.as_slice() != provided_sha_sum_of_rest {
-        return Err(FirmwareFileError::ChecksumMismatch);
+        return Err(UpdateFileErro::ChecksumMismatch);
     }
 
     // And if the signature is correct:
     let verifying_key: VerifyingKey<MlDsa87> = VerifyingKey::decode(
         (&key_provider
             .get_mldsa87_pubkey(key_id)
-            .ok_or(FirmwareFileError::KeyNotFound)?)
+            .ok_or(UpdateFileErro::KeyNotFound)?)
             .try_into()
             .unwrap(),
     );
 
     let signature = Signature::decode((&provided_signature).try_into().unwrap())
-        .ok_or(FirmwareFileError::SignatureError)?;
+        .ok_or(UpdateFileErro::SignatureError)?;
 
     if verifying_key
         .verify(&provided_sha_sum_of_rest, &signature)
         .is_err()
     {
-        return Err(FirmwareFileError::SignatureError);
+        return Err(UpdateFileErro::SignatureError);
     }
 
-    // If this stage has been reached, the firmware should be valid.
+    // If this stage has been reached, the file should be valid.
 
     Ok(())
 }
 
 fn validate_magic_and_additional_metadata(
-    data_provider: &mut dyn FirmwareFileProvider,
-    trigger: &dyn FirmwareUpdateEffector,
-) -> Result<(), FirmwareFileError> {
+    data_provider: &mut dyn UpdateFileProvider,
+    trigger: &dyn UpdateEffector,
+) -> Result<(), UpdateFileErro> {
     data_provider.seek(0);
     let mut magic: [u8; 8] = [0; 8];
     data_provider.read_exact(&mut magic)?;
     if magic != "UPXD0001".as_bytes() {
-        return Err(FirmwareFileError::IncorrectMagic);
+        return Err(UpdateFileErro::IncorrectMagic);
     }
 
     // Seek to additional metadata section:
@@ -87,7 +87,7 @@ fn validate_magic_and_additional_metadata(
 
     trigger.check_if_compatible(&metadata)?;
     if metadata.length != data_provider.get_file_length() {
-        Err(FirmwareFileError::LengthMismatch)
+        Err(UpdateFileErro::LengthMismatch)
     } else {
         Ok(())
     }
@@ -95,10 +95,10 @@ fn validate_magic_and_additional_metadata(
 
 pub fn validate_update(
     key_provider: &dyn KeyProvider,
-    data_provider: &mut dyn FirmwareFileProvider,
-    trigger: &dyn FirmwareUpdateEffector,
-) -> Result<(), FirmwareFileError> {
-    // Read whether or not we're even compatible with this firmware update:
+    data_provider: &mut dyn UpdateFileProvider,
+    trigger: &dyn UpdateEffector,
+) -> Result<(), UpdateFileErro> {
+    // Read whether or not we're even compatible with this update:
     validate_magic_and_additional_metadata(data_provider, trigger)?;
     // Read the main header (and check signatures):
     validate_main_header(key_provider, data_provider)?;
@@ -108,9 +108,9 @@ pub fn validate_update(
 
 pub fn validate_and_perform_update(
     key_provider: &dyn KeyProvider,
-    data_provider: &mut dyn FirmwareFileProvider,
-    trigger: &dyn FirmwareUpdateEffector,
-) -> Result<(), FirmwareFileError> {
+    data_provider: &mut dyn UpdateFileProvider,
+    trigger: &dyn UpdateEffector,
+) -> Result<(), UpdateFileErro> {
     validate_update(key_provider, data_provider, trigger)?;
     // Export second stage updater
     data_provider.seek(SECOND_STAGE_OFFSET);

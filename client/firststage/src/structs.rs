@@ -1,4 +1,4 @@
-use crate::errors::FirmwareFileError;
+use crate::errors::UpdateFileErro;
 
 pub const ADDITIONAL_METADATA_OFFSET: u64 = 8 + 8 + 64 + 4627;
 pub const MAGIC_OFFSET: u64 = 0;
@@ -67,7 +67,7 @@ pub struct AdditionalMetadata {
 }
 
 impl AdditionalMetadata {
-    pub fn from(data: &[u8; 16]) -> Result<Self, FirmwareFileError> {
+    pub fn from(data: &[u8; 16]) -> Result<Self, UpdateFileErro> {
         let major = u16::from_le_bytes((&data[0..2]).try_into().unwrap());
         let minor = u16::from_le_bytes((&data[2..4]).try_into().unwrap());
         let patch = u16::from_le_bytes((&data[4..6]).try_into().unwrap());

@@ -14,7 +14,7 @@ use firststage::{
 use reqwest::{Certificate, Url};
 
 use crate::local_fs_impl::{
-    FSFirmwareFileProvider, FSFirmwareUpdateEffector, FSKeyProvider, TRIGGER_UPDATE_FILE,
+    FSUpdateFileProvider, FSUpdateEffector, FSKeyProvider, TRIGGER_UPDATE_FILE,
 };
 
 /// Package an installer into an xdu file
@@ -82,8 +82,8 @@ fn main() {
     match args.command {
         Commands::VerifyFile { file } => {
             let file = File::open(file).unwrap();
-            let mut source = FSFirmwareFileProvider::new(file);
-            let dummy_effector = FSFirmwareUpdateEffector::new_validation_only(current_ver);
+            let mut source = FSUpdateFileProvider::new(file);
+            let dummy_effector = FSUpdateEffector::new_validation_only(current_ver);
             if let Err(x) = validate_update(&key_provider, &mut source, &dummy_effector) {
                 println!("Error! {x:?}");
             } else {
@@ -92,8 +92,8 @@ fn main() {
         }
         Commands::ExtractFile { file, destination } => {
             let file = File::open(file).unwrap();
-            let mut source = FSFirmwareFileProvider::new(file);
-            let effector = FSFirmwareUpdateEffector::new(current_ver, &destination);
+            let mut source = FSUpdateFileProvider::new(file);
+            let effector = FSUpdateEffector::new(current_ver, &destination);
             if let Err(x) = validate_and_perform_update(&key_provider, &mut source, &effector) {
                 println!("Error! {x:?}");
             } else {
@@ -170,8 +170,8 @@ fn main() {
                 .open(&temp_file_path)
                 .unwrap();
             update_file_response.copy_to(&mut temporary_file).unwrap();
-            let effector = FSFirmwareUpdateEffector::new(current_ver, &installer_to_write);
-            let mut source = FSFirmwareFileProvider::new(temporary_file);
+            let effector = FSUpdateEffector::new(current_ver, &installer_to_write);
+            let mut source = FSUpdateFileProvider::new(temporary_file);
             validate_and_perform_update(&key_provider, &mut source, &effector).unwrap();
 
             // fs::remove_file(&temp_file_path).unwrap();

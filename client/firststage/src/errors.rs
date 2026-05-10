@@ -1,7 +1,7 @@
 use core::{error::Error, fmt::Display};
 
 #[derive(Debug)]
-pub enum FirmwareFileError {
+pub enum UpdateFileErro {
     IllegalDataFoundInSectionDeclaration,
     IncorrectMagic,
     ChecksumMismatch,
@@ -15,10 +15,10 @@ pub enum FirmwareFileError {
     WriteError,
 }
 
-impl Display for FirmwareFileError {
+impl Display for UpdateFileErro {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        write!(f, "Firmware update error: {:?}", self)
+        write!(f, "Update error: {:?}", self)
     }
 }
 
-impl Error for FirmwareFileError {}
+impl Error for UpdateFileErro {}
